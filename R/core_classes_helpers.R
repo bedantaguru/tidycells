@@ -13,10 +13,19 @@ core_as_cells_internal <- function(df, ...) {
 core_as_cells_internal.default <- function(
     df,
     include_colnames = TRUE,
-    include_rownames = TRUE,
+    # include_rownames can be TRUE, FASLE and "auto".
+    # If "auto", it will be TRUE if the data.frame has rownames which are non-numeric.
+    include_rownames = "auto",
     translate_to_custom_type = TRUE,
     ...
 ) {
+
+  # The [include_rownames = "auto"] case
+  if (is.character(include_rownames) && include_rownames == "auto") {
+    # \\D matches any non-digit character (including dot)
+    include_rownames <- !is.null(rownames(df)) &&
+      any(stringr::str_detect(rownames(df), "\\D"))
+  }
 
   # Safe character conversion
   safe_char <- function(x) {
@@ -59,8 +68,8 @@ core_as_cells_internal.default <- function(
   row_names <- rownames(df)
   col_names <- colnames(df)
 
-  row_offset <- if (include_rownames) 1L else 0L
-  col_offset <- if (include_colnames) 1L else 0L
+  col_offset <- if (include_rownames) 1L else 0L
+  row_offset <- if (include_colnames) 1L else 0L
 
   # convert to character each cols
   value_list <- lapply(df, safe_char)
@@ -89,6 +98,7 @@ core_as_cells_internal.default <- function(
       value = rownames(df),
       data_type = "character"
     )
+
     out <- dplyr::bind_rows(r_part, out)
   }
 
@@ -201,31 +211,42 @@ core_as_cells_internal.meltr <- function(df, ...) {
   )
 }
 
+#' @noRd
+core_as_cells_internal.this_format <- function(df, ...) {
+  # No Transformation required for `this_format` class.
+  df
+}
+
 core_detect_format_for_as_cells_internal <- function(df) {
 
   # Define known formats from different packages, specifying expected columns and data_type values
   chk <- tibble::tibble(
     # This is taken from core_cells_class_internal
-    type = c("tidyxl", "unpivotr", "meltr"),
+    # (this_format : is the format of cells class)
+    type = c("tidyxl", "unpivotr", "meltr", "this_format"),
 
     # Required columns typically found in each type of structure
     col_names = list(
       c("sheet", "address", "row", "col", "is_blank", "data_type", "error", "logical", "numeric", "date", "character"),
       c("row", "col", "data_type"),
-      c("row", "col", "data_type", "value")
+      c("row", "col", "data_type", "value"),
+      c("row", "col", "value", "data_type")
     ),
 
     # Expected values in the data_type column for each source
     data_types = list(
       c("error", "logical", "numeric", "date", "character", "blank"),
       c("chr", "cpl", "cplx", "dbl", "fct", "int", "lgl", "list", "ord"),
-      c("integer", "character", "date")
+      c("integer", "character", "date"),
+      # This is for cells class
+      core_cell_recognized_format()
     ),
 
     # Optional columns often (but not always) found in the data
     optional_cols = list(
       c("sheet", "error", "logical", "numeric", "date", "character", "blank"),
       c("chr", "cpl", "cplx", "dbl", "fct", "int", "lgl", "list", "ord"),
+      character(0),
       character(0)
     )
   )
@@ -242,6 +263,12 @@ core_detect_format_for_as_cells_internal <- function(df) {
   scores <- chk %>%
     dplyr::mutate(
       col_match = purrr::map_lgl(.data$col_names, ~ all(.x %in% names(df))),
+      extra_cols = purrr::map2_int(
+        .data$col_names, .data$optional_cols,
+        function(required, optional) {
+          # Length of Extra cols in df from required + optional
+          length(setdiff(names(df), c(required, optional)))
+        }),
       type_score = purrr::map_int(.data$data_types, ~ sum(df$data_type %in% .x)),
       opt_score = purrr::map_int(.data$optional_cols, ~ sum(.x %in% names(df)))
     ) %>%
@@ -254,10 +281,9 @@ core_detect_format_for_as_cells_internal <- function(df) {
 
   # Select the format with the best score: highest match on data_type and optional columns
   best_match <- scores %>%
-    dplyr::filter(
-      .data$type_score == max(.data$type_score),
-      .data$opt_score == max(.data$opt_score)
-    ) %>%
+    dplyr::filter(.data$extra_cols == min(.data$extra_cols)) %>%
+    dplyr::filter(.data$type_score == max(.data$type_score)) %>%
+    dplyr::filter(.data$opt_score == max(.data$opt_score)) %>%
     dplyr::pull(.data$type)
 
   # Return the matched type, or "unknown" if somehow none matched
@@ -274,7 +300,9 @@ core_detect_format_for_as_cells_internal <- function(df) {
 core_do_as_cells_internal <- function(df, ..., silent = TRUE) {
   # Ensure the input is a data.frame
   if (!inherits(df, "data.frame")) {
-    rlang::abort("Input must be a data.frame or of equivalent type.")
+    rlang::abort(
+      "Input must be a data.frame or of equivalent type.",
+      call = NULL)
   }
   # Detect the format of the input data
   internal_class <- core_detect_format_for_as_cells_internal(df)
@@ -297,8 +325,11 @@ core_do_as_cells_internal <- function(df, ..., silent = TRUE) {
   # Check if all required columns are present
   if(!all(required_cols %in% this_cols)) {
     rlang::abort(
-      "The input data have missing required columns: ",
-      paste(setdiff(required_cols, this_cols), collapse = ", "),
+      paste0(
+        "The input data have missing required columns: ",
+        paste(setdiff(required_cols, this_cols), collapse = ", ")
+      ),
+      call = NULL
     )
   }
 
@@ -308,8 +339,8 @@ core_do_as_cells_internal <- function(df, ..., silent = TRUE) {
 
   # other type present
   df_2 <- df_1 %>%
-    # data_type should be character, numeric, or logical rest discard
-    dplyr::filter(.data$data_type %in% c("character", "numeric", "logical"))
+    # data_type should be one of core_cell_recognized_format() - rest discard
+    dplyr::filter(.data$data_type %in% core_cell_recognized_format())
 
   if(!silent){
     message("Detected format: ", internal_class)
@@ -322,7 +353,7 @@ core_do_as_cells_internal <- function(df, ..., silent = TRUE) {
         "Some rows were filtered out due to unsupported data types:",
         paste0(setdiff(
           unique(df_1$data_type),
-          c("character", "numeric", "logical")), collapse = ", "))
+          core_cell_recognized_format()), collapse = ", "))
     }
   }
 
@@ -381,7 +412,8 @@ core_as_sheets_internal.list <- function(lst, ...) {
   # Ensure the input is a list of data.frames
   if(!util_convertible_to_processable(lst)){
     rlang::abort(
-      "Input must be a list of data.frames/matrix (or of equivalent types)."
+      "Input must be a list of data.frames/matrix (or of equivalent types).",
+      call = NULL
     )
   }
 
@@ -401,7 +433,7 @@ core_as_sheets_internal.list <- function(lst, ...) {
   }
   # Ensure names are unique
   if (any(duplicated(Names))) {
-    Names <- make.unique(Names, sep = "_")
+    Names <- util_make_unique_minimal(Names)
   }
 
   # Assign names to the list

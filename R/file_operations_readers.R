@@ -207,6 +207,7 @@ file_op_read_excel_from_readxl <- function(fn) {
   sheets <- readxl::excel_sheets(fn)
 
   all_sheets_data <- purrr::map(sheets, ~process_sheet(fn, .x))
+  names(all_sheets_data) <- sheets
 
   all_sheets_data
 }

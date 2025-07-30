@@ -32,7 +32,7 @@ attach_header <- function(dat, hdr, direction = c("v","h","vl","vr","vm","hu","h
 
 # Wrapper function to attach header
 attach_header_base <- function(dat, hdr,
-                               direction = c("v","h","vl","vr","vm","hu","hd","hm","direct")) {
+                               direction = c("v","h","vl","vr","vm","hu","hd","hm","direct","nothing")) {
   direction <- match.arg(direction)
   switch(direction,
          v  = attach_header_simple(dat, hdr, by = "col"),
@@ -43,7 +43,9 @@ attach_header_base <- function(dat, hdr,
          hu = attach_header_segment(dat, hdr, axis = "row", cuts_fun = attach_header_util_header_data_dir_cuts, direction = 1),
          hd = attach_header_segment(dat, hdr, axis = "row", cuts_fun = attach_header_util_header_data_dir_cuts, direction = -1),
          hm = attach_header_segment(dat, hdr, axis = "row", cuts_fun = attach_header_util_header_data_dir_cuts_mid),
-         direct = attach_header_direct(dat, hdr)
+         direct = attach_header_direct(dat, hdr),
+         # Do nothing
+         nothing = dat
   )
 }
 

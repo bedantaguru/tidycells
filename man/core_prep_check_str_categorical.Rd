@@ -22,3 +22,4 @@ A character vector of the same length as \code{x} with values
 This function evaluates each element of a character vector \code{x} to determine
 if it matches any of the provided frequent words or patterns.
 }
+\keyword{internal}

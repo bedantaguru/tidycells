@@ -4,7 +4,7 @@
 \alias{infer_block_boundary}
 \title{Weighted Percentile Boundary of Grid Cells (blocks)}
 \usage{
-infer_block_boundary(df, coverage = 0.95, exact = FALSE)
+infer_block_boundary(df, coverage = 0.95, exact = TRUE)
 }
 \arguments{
 \item{df}{Data frame with 'row' and 'col' columns. (Optionally grouped)}
@@ -12,7 +12,7 @@ infer_block_boundary(df, coverage = 0.95, exact = FALSE)
 \item{coverage}{Proportion to cover, default is 0.95 (95\% block).}
 
 \item{exact}{If \code{TRUE}, uses exact min/max instead of percentiles. Default
-is \code{FALSE}.}
+is \code{TRUE}.}
 }
 \value{
 tibble: r_min, r_max, c_min, c_max. (group vars if \code{df} is grouped)

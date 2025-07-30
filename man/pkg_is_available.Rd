@@ -23,3 +23,4 @@ package.
 \seealso{
 \code{\link[=pkg_not_available]{pkg_not_available()}}
 }
+\keyword{internal}

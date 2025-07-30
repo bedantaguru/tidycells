@@ -22,3 +22,4 @@ Records packages as "not available" for testing purposes.
 \seealso{
 \code{\link[=pkg_is_available]{pkg_is_available()}}
 }
+\keyword{internal}

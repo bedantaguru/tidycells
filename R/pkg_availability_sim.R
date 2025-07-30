@@ -32,6 +32,7 @@ pkg_availability_sim_env <- new.env()
 #'   otherwise.
 #'
 #' @seealso [pkg_not_available()]
+#' @keywords internal
 pkg_is_available <- function(pkg, check_working = FALSE) {
   # All these safe checking may not be required as this function is not designed
   # to be called by end users
@@ -102,6 +103,7 @@ pkg_is_available <- function(pkg, check_working = FALSE) {
 #'   environment.
 #'
 #' @seealso [pkg_is_available()]
+#' @keywords internal
 pkg_not_available <- function(pkgs, add = TRUE) {
   pkg_init_if_not_already()
 

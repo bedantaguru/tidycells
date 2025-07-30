@@ -27,7 +27,7 @@ BugReports: https://github.com/r-rudra/tidycells/issues
 Depends:
     R (>= 3.2.0)
 Imports: 
-    dplyr (>= 0.8.1),
+    dplyr (>= 1.1.0),
     magrittr,
     purrr (>= 0.3.2),
     rlang,
@@ -35,7 +35,8 @@ Imports:
     tibble,
     tidyr,
     utils,
-    methods
+    methods,
+    stats
 Suggests: 
     cli,
     covr,
@@ -51,7 +52,7 @@ Suggests:
     rstudioapi,
     shiny,
     shinytest,
-    testthat (>= 2.1.0),
+    testthat (>= 3.0.0),
     tidyxl,
     xlsx,
     meltr,
@@ -63,3 +64,4 @@ Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Config/testthat/edition: 3

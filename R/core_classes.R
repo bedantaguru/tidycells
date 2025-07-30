@@ -95,11 +95,21 @@ NULL
 core_cells_class <- c("cells", "sheet", "tbl_df", "tbl", "data.frame")
 core_sheets_class <- c("sheets", "list")
 
-core_cells_class_internal <- c("tidyxl", "unpivotr", "meltr", "unknown")
+# Class for analysis output of `cells` objects
+core_cells_analysis_class <- c("cells_analysis", "sheet_analysis", "list")
+
+# Class for analysis output of `cells` objects
+core_cells_composition_class <- c("cells_composition", "sheet_composition", "list")
+
+
+core_cells_class_internal <- c("tidyxl", "unpivotr", "meltr", "this_format", "unknown")
 
 # Set the old class for S4 methods compatibility
 methods::setOldClass(core_cells_class)
 methods::setOldClass(core_sheets_class)
+methods::setOldClass(core_cells_analysis_class)
+methods::setOldClass(core_cells_composition_class)
+
 
 
 # Recognized Content Formats for Cells
@@ -374,7 +384,7 @@ core_ensure_cells_format <- function(dat) {
   val <- core_validate_cells(dat)
 
   if (!val) {
-    rlang::abort(paste0(attr(val, "msg"), collapse = "\n"))
+    rlang::abort(paste0(attr(val, "msg"), collapse = "\n"), call = NULL)
   }
 
   if (!is.integer(dat$row)) {
@@ -410,7 +420,7 @@ core_ensure_sheets_format <- function(lst){
   val <- core_validate_sheets(lst)
 
   if (!val) {
-    rlang::abort(paste0(attr(val, "msg"), collapse = "\n"))
+    rlang::abort(paste0(attr(val, "msg"), collapse = "\n"), call = NULL)
   }
 
   # Remove any induced intermediate classes
@@ -429,3 +439,7 @@ core_ensure_sheets_format <- function(lst){
 
 # --- Conversion Methods on `cells` and `sheets` class ---
 # These are kept in core_classes_helpers.R
+
+
+# Section: Cells/Sheet Analysis Class Methods ----
+

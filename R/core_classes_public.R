@@ -126,7 +126,7 @@ as_sheets.cells <- function(x) {
 }
 
 #' @export
-as_sheets.list_of_cells <- function(x) {
+as_sheets.sheets <- function(x) {
   # If the object is already a 'sheets' object, just re-check its format.
   core_ensure_sheets_format(x)
 }

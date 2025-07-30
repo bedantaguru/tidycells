@@ -1,52 +1,58 @@
-#' Value-Attribute Classification for `cells` Objects
+# Value and Attribute classification
+
+#' Value and Attribute classification
 #'
-#' Classifies each cell in a `cells` object as more likely to be an "attribute"
-#' (e.g., header or label) or a "value" (e.g., data entry), based on its content
-#' type and configurable heuristics. This function adds or updates the columns
-#' `type`, `PoA` (Probability of Attribute), and `PoV` (Probability of Value) in
-#' the supplied `cells` object. This supports tidy and semantic analysis of
-#' tabular data.
+#' *Classify Cells as Attribute or Value in a `cells` Object:*
 #'
-#' @section Value-Attribute Classification: The classification process uses the
-#'   content of each cell (column `value`) and its initially read type (column
-#'   `data_type`) to determine:
+#' This function assigns to each cell in a `cells` object a classification of
+#' "attribute" (such as a header or label) or "value" (such as a data entry),
+#' using configurable heuristics or probabilistic logic. It updates or adds the
+#' columns `type`, `PoA` (probability of attribute), and `PoV` (probability of
+#' value) to the input object. This supports semantic and tidy table analysis.
+#'
+#' @section Classification Logic: The classification is based on cell content
+#'   (`value` column) and its original type (`data_type` column). The columns
+#'   added or updated are:
 #' \itemize{
-#'   \item `type`: The refined content type, one of `"numeric"`, `"character"`,
-#'   `"logical"`, `"categorical"`, `"date"`, `"time"`, or `"blank"`.
-#'   \item `PoA`: Probability (in `[0,1]`) that the cell is an attribute.
-#'   \item `PoV`: Probability (in `[0,1]`) that the cell is a value.
+#'   \item `type`: The detected or refined type of the cell, one of `"numeric"`,
+#'   `"character"`, `"logical"`, `"categorical"`, `"date"`, `"time"`, or
+#'   `"blank"`.
+#'   \item `PoA`: Probability (between 0 and 1) that the cell is an attribute
+#'   (header/label).
+#'   \item `PoV`: Probability (between 0 and 1) that the cell is a value (data
+#'   entry).
 #' }
-#'   The constraint `PoA + PoV <= 1` holds for all cells.
+#'   It is always true that `PoA + PoV <= 1` for any cell.
 #'
-#' @param x A valid `cells` object (see [cells-class]).
-#' @param method Character, one of `"probabilistic"`, `"heuristic_type_1"`, or
-#'   `"heuristic_type_2"`. Controls the classification logic:
+#' @param x A `cells` object to be classified.
+#' @param method Character; one of `"auto"`, `"probabilistic"`,
+#'   `"simple_heuristic"`, or `"manual"`. Controls which classification method
+#'   is used:
 #'   \describe{
-#'     \item{`"probabilistic"`}{Uses probabilistic type inference, allowing ambiguous types
-#'     (such as `"logical"`, `"categorical"`, `"date"`, and `"time"`) to be classified
-#'     as either attribute or value based on conditional probability distributions. This is
-#'     more resource-intensive but usually gives better result.}
-#'     \item{`"heuristic_type_1"`}{Assumes that `"logical"`, `"categorical"`, `"date"`, and `"time"`
-#'     types are almost always attributes (e.g., headers), assigning them `PoA = 1`, `PoV = 0`.
-#'     (default)}
-#'     \item{`"heuristic_type_2"`}{Assumes ambiguous types (`"logical"`, `"categorical"`, `"date"`, `"time"`)
-#'     may be either attribute or value, assigning both `PoA = 0.5`, `PoV = 0.5`.}
+#'     \item{`"auto"`}{Selects the method automatically based on the size of `x`
+#'     and presence of manual tags. (default)}
+#'     \item{`"probabilistic"`}{Uses probabilistic inference to determine
+#'     attribute/value likelihoods, especially for ambiguous types. More
+#'     accurate but slower for large data.}
+#'     \item{`"simple_heuristic"`}{Uses fast, rule-based logic. Suitable for
+#'     large tables, less nuanced.}
+#'     \item{`"manual"`}{Uses human-provided tags in `av_class_tag` if present.}
 #'   }
 #'
-#' @return The input `cells` object with updated or added columns: `type`,
-#'   `PoA`, and `PoV`.
+#' @return The original `cells` object, with the columns `type`, `PoA`, and
+#'   `PoV` added or updated.
 #'
-#' @details This function is central to table structure learning and semantic
-#'   table analysis. It uses robust heuristics and probabilistic methods
-#'   (depending on `method`), but users may further adjust the resulting
-#'   probabilities for custom logic. For details on the `cells` object structure
-#'   and recognized formats, see [cells-class].
+#' @details The function is essential for semantic table analysis and structure
+#'   detection. Probabilities and type assignments can be further customized
+#'   after classification. For more on the `cells` object format, see
+#'   [cells-class].
 #'
 #' @seealso [cells-class]
 #' @export
 value_attribute_classify <- function(
     x,
-    method = c("probabilistic", "heuristic_type_1", "heuristic_type_2")) {
+    # Later visual method is to be added.
+    method = c("auto","probabilistic", "simple_heuristic", "manual")) {
 
   # Check and halt if the input is not a valid cells object. Otherwise, proceed
   # with the classification
@@ -56,12 +62,31 @@ value_attribute_classify <- function(
 
   method <- match.arg(method)
 
+  # If the method is "auto", use best available method based on the size and
+  # whether av_class_tag is present then directly use manual
+  if(method == "auto") {
+    if(utils::hasName(x, "av_class_tag")) {
+      # If av_class_tag is present, use manual method as it is the most accurate
+      # as av_class_tag is supposed to be manually tagged and it is not supposed
+      # to be used for probabilistic or heuristic methods.
+      method <- "manual"
+    } else if(NROW(x) < 30000) {
+      # If the number of rows is less than 30,000, use probabilistic method as
+      # it has TPS of 27k per sec (around 1 sec for 30k rows)
+      method <- "probabilistic"
+    } else {
+      # Quite large, use simple heuristic as its really fast
+      method <- "simple_heuristic"
+    }
+  }
+
+
   if(method == "probabilistic") {
     x <- core_prep_va_heuristic_probabilistic(x)
-  } else if(method == "heuristic_type_1") {
-    x <- core_prep_va_heuristic_type_1(x)
-  } else if(method == "heuristic_type_2") {
-    x <- core_prep_va_heuristic_type_2(x)
+  } else if(method == "simple_heuristic") {
+    x <- core_prep_va_simple_heuristic(x)
+  } else if(method == "manual") {
+    x <- core_prep_va_manual(x)
   }
 
   return(x)

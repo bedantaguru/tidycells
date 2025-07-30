@@ -1,20 +1,21 @@
 
 file_op_validate_file_input <- function(fn) {
   if (missing(fn) || is.null(fn)) {
-    rlang::abort("No file name given.")
+    rlang::abort("No file name given.", call = NULL)
   }
   if (length(fn) != 1) {
-    rlang::abort("Only one file name is supported.")
+    rlang::abort("Only one file name is supported.", call = NULL)
   }
   if (!is.character(fn)) {
-    rlang::abort("File name must be a character string.")
+    rlang::abort("File name must be a character string.", call = NULL)
   }
   if (nchar(fn) == 0) {
-    rlang::abort("File name must be a non-empty character string.")
+    rlang::abort("File name must be a non-empty character string.", call = NULL)
   }
   if (!file.exists(fn)) {
     rlang::abort(
-      paste0("File does not exist (or you may not have permission): '", fn, "'")
+      paste0("File does not exist (or you may not have permission): '", fn, "'"),
+      call = NULL
     )
   }
   invisible(NULL)

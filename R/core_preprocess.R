@@ -645,6 +645,7 @@ core_prep_check_str_logical <- function(x, allowed_strings = NULL) {
 #'
 #' @return A character vector of the same length as `x` with values
 #'   "categorical", "non_categorical", or "blank".
+#' @keywords internal
 core_prep_check_str_categorical <- function(x, allowed_strings = NULL) {
 
   # Note here allowed string is used differently as compared to other functions.
@@ -831,7 +832,8 @@ core_prep_detect_type_based_on_str_plain <- function(
         paste(invalid_names, collapse = ", "),
         ". Allowed values: ",
         paste(names(detect_steps), collapse = ", ")
-      )
+      ),
+      call = NULL
     )
   }
 
@@ -959,37 +961,73 @@ core_prep_prob_of_type_based_on_str <- function(
     date_allowed_strings = NULL,
     time_allowed_strings = NULL,
     logical_allowed_strings = NULL,
-    categorical_allowed_strings = NULL
+    categorical_allowed_strings = NULL,
+    numeric_unit_check = FALSE
 ) {
 
   if (length(x) == 0) {
     return(character(0))
   }
 
-  all_patterns <- c(
-    "time", "date", "logical", "numeric", "categorical",
-    "numeric_most_relaxed", "numeric_relaxed", "numeric_strict",
-    "numeric_most_relaxed_with_unit", "date_relaxed","time_relaxed"
-  )
+  if(numeric_unit_check){
+    all_patterns <- c(
+      "time", "date", "logical", "numeric", "categorical",
+      "numeric_most_relaxed", "numeric_relaxed", "numeric_strict",
+      "numeric_most_relaxed_with_unit", "date_relaxed","time_relaxed"
+    )
 
-  # wts for each type
-  # c(
-  #   "logical", -> 1
-  #   "categorical", ->1
-  #   # numeric types
-  #   "numeric","numeric_most_relaxed", "numeric_relaxed", "numeric_strict",
-  #   "numeric_most_relaxed_with_unit", -> 5
-  #   "date", "date_relaxed" ->2
-  #   "time", "time_relaxed" -> 2
-  # )
+    # wts for each type
+    # c(
+    #   "logical", -> 1
+    #   "categorical", ->1
+    #   # numeric types
+    #   "numeric","numeric_most_relaxed", "numeric_relaxed", "numeric_strict",
+    #   "numeric_most_relaxed_with_unit", -> 5
+    #   "date", "date_relaxed" ->2
+    #   "time", "time_relaxed" -> 2
+    # )
 
-  wts_for_type <- c(
-    logical = 1,
-    categorical = 1,
-    numeric = 5,
-    date = 2,
-    time = 2
-  )
+    wts_for_type <- c(
+      logical = 1,
+      categorical = 1,
+      numeric = 5,
+      date = 2,
+      time = 2
+    )
+
+
+  } else {
+
+    # Excluding numeric_most_relaxed_with_unit which is most computationally
+    # expensive
+    all_patterns <- c(
+      "time", "date", "logical", "numeric", "categorical",
+      "numeric_most_relaxed", "numeric_relaxed", "numeric_strict",
+      "date_relaxed","time_relaxed"
+    )
+
+    # wts for each type
+    # c(
+    #   "logical", -> 1
+    #   "categorical", ->1
+    #   # numeric types
+    #   "numeric","numeric_most_relaxed", "numeric_relaxed", "numeric_strict" -> 4
+    #   "date", "date_relaxed" ->2
+    #   "time", "time_relaxed" -> 2
+    # )
+
+    wts_for_type <- c(
+      logical = 1,
+      categorical = 1,
+      numeric = 4,
+      date = 2,
+      time = 2
+    )
+
+  }
+
+
+
 
   # create two entry for character and blank
   wts_for_type <- c(
@@ -1068,7 +1106,7 @@ core_prep_prob_of_type_based_on_str <- function(
 
 # This one assumes that: logical, categorical, date, time are part of
 # attribute.
-core_prep_va_heuristic_type_1 <- function(d, honour_read_type = TRUE) {
+core_prep_va_simple_heuristic <- function(d, honour_read_type = TRUE) {
   # Assumes d as proper cells and it's verified before calling this function
 
   if(honour_read_type) {
@@ -1108,43 +1146,43 @@ core_prep_va_heuristic_type_1 <- function(d, honour_read_type = TRUE) {
   d
 }
 
-# This one assumes that: logical, categorical, date, time can be either part of
-# value or attribute. Thus keeps a provision for dynamic attribute finding in
-# case more more than desired attribute is present in non-single side.
-core_prep_va_heuristic_type_2 <- function(d, honour_read_type = TRUE) {
+# This one assumes that: There is an additional column named `av_class_tag` (a
+# character containing only attr, val, empty) created manually or otherwise
+# which indicates whether the cell is a value or an attribute. This is typically
+# used in manual data entry or when the data is already pre-processed to have
+# this information.
+core_prep_va_manual <- function(d) {
   # Assumes d as proper cells and it's verified before calling this function
 
-  if(honour_read_type) {
-    # Init with already read format
-    d$type  <- d$data_type
-  } else {
-    d$type <- rep("character", nrow(d))
+  # Check if the `av_class_tag` column exists
+  if(!"av_class_tag" %in% colnames(d)) {
+    rlang::abort(
+      "The cells must contain tagged in 'av_class_tag'.",
+      call = NULL)
   }
 
-  d$type <- core_prep_detect_type_based_on_str(
-    x = d$value,
-    prior_type_info = d$type
-  )
+  # Check if av_class_tag is character and contains only "attr", "val", or "empty"
+  if(!is.character(d$av_class_tag) ||
+     (length(setdiff(d$av_class_tag, c("attr", "val", "empty"))) > 0) ) {
+    rlang::abort(
+      "The 'av_class_tag' must be a character vector containing only 'attr', 'val', or 'empty'.",
+      call = NULL)
+  }
+
+
+
+  # Init with already read format
+  d$type  <- d$data_type
+
+  # Set PoA and PoV based on `av_class_tag` only
 
   d$PoA <- dplyr::case_when(
-    d$type == "date" ~ 0.5,
-    d$type == "time" ~ 0.5,
-    d$type == "logical" ~ 0.5,
-    d$type == "categorical" ~ 0.5,
-    d$type == "numeric" ~ 0,
-    d$type == "blank" ~ 0,
-    d$type == "character" ~ 1,
+    d$av_class_tag == "attr" ~ 1,
     TRUE ~ 0
   )
 
   d$PoV <- dplyr::case_when(
-    d$type == "date" ~ 0.5,
-    d$type == "time" ~ 0.5,
-    d$type == "logical" ~ 0.5,
-    d$type == "categorical" ~ 0.5,
-    d$type == "numeric" ~ 1,
-    d$type == "blank" ~ 0,
-    d$type == "character" ~ 0,
+    d$av_class_tag == "val" ~ 1,
     TRUE ~ 0
   )
 
@@ -1188,42 +1226,79 @@ core_prep_va_heuristic_probabilistic <- function(d, honour_read_type = TRUE) {
   # Assign the type corresponding to the highest probability for each row. This
   # is primarily for tracking or debugging purposes and can be discarded later
   # if not needed.
-  type <- colnames(prob_type)[max.col(
+  d$type <- colnames(prob_type)[max.col(
     as.matrix(prob_type), ties.method = "first")]
 
+  # Note that "numeric", "character", "logical", "date", "time", "categorical",
+  # "blank" are not exhaustive so "character" -->> ("logical", "date", "time",
+  # "categorical") So PoA_given_type and PoV_given_type are not exhaustive. if
+  # we define like this :
+
+  # PoA_given_type <- c(
+  #   date = 1,
+  #   time = 1,
+  #   logical = 1,
+  #   categorical = 1,
+  #   numeric = 0,
+  #   blank = 0,
+  #   character = 1
+  # )
+  #
+  # PoV_given_type <- c(
+  #   date = 0,
+  #   time = 0,
+  #   logical = 0,
+  #   categorical = 0,
+  #   numeric = 1,
+  #   blank = 0,
+  #   character = 0
+  # )
+
+  # Instead we join prob_type DF and define PoA_given_type and PoV_given_type as
+  # follows:
+
+  # Only three types are near exhaustive: "numeric", "character_like", "blank"
+  # character_like is combination of "logical", "date", "time", "categorical",
+  # "character" (it can be based on max values of either of them or weighted
+  # average of them) (weighted average is not used here)
+  prob_type_exhaustive <- prob_type %>%
+    dplyr::mutate(
+      character_like = pmax(
+        .data$logical, .data$date, .data$time, .data$categorical, .data$character
+      )
+    ) %>%
+    dplyr::select(
+      "numeric", "character_like", "blank"
+    )
+
+  # Please note even though the prob_type_exhaustive is not exhaustive as row
+  # sums may exceed 1,
+
   PoA_given_type <- c(
-    date = 1,
-    time = 1,
-    logical = 1,
-    categorical = 1,
     numeric = 0,
     blank = 0,
-    character = 1
+    character_like = 1
   )
 
   PoV_given_type <- c(
-    date = 0,
-    time = 0,
-    logical = 0,
-    categorical = 0,
     numeric = 1,
     blank = 0,
-    character = 0
+    character_like = 0
   )
 
-  # Ensure PoA_given_type and PoV_given_type are in the same order as prob_type
-  PoA_given_type <- PoA_given_type[colnames(prob_type)]
+  # Ensure PoA_given_type and PoV_given_type are in the same order as prob_type_exhaustive
+  PoA_given_type <- PoA_given_type[colnames(prob_type_exhaustive)]
 
   # Adjustments for non disjoint sets using rowSums(prob_type)
-  PoA_scores <- as.numeric(as.matrix(prob_type) %*% PoA_given_type) /
-    rowSums(prob_type)
+  PoA_scores <- as.numeric(as.matrix(prob_type_exhaustive) %*% PoA_given_type) /
+    rowSums(prob_type_exhaustive)
 
   # Ensure PoV_given_type is in the same order as prob_type
-  PoV_given_type <- PoV_given_type[colnames(prob_type)]
+  PoV_given_type <- PoV_given_type[colnames(prob_type_exhaustive)]
 
   # Adjustments for non disjoint sets using rowSums(prob_type)
-  PoV_scores <- as.numeric(as.matrix(prob_type) %*% PoV_given_type) /
-    rowSums(prob_type)
+  PoV_scores <- as.numeric(as.matrix(prob_type_exhaustive) %*% PoV_given_type) /
+    rowSums(prob_type_exhaustive)
 
   d$PoA <- pmax(pmin(PoA_scores, 1),0)
 

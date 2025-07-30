@@ -15,6 +15,8 @@
   no_txt = FALSE,
   max_txt_len = 10,
   no_plot = FALSE,
+  boundaries = NULL,
+  add_cell_address = FALSE,
   allow_rc_df = FALSE
 )
 }
@@ -44,6 +46,13 @@ before truncation. Default is \code{10}.}
 
 \item{no_plot}{Logical. If \code{TRUE}, returns the ggplot object without
 displaying / plotting it. Default is \code{FALSE}.}
+
+\item{boundaries}{Data frame containing boundary rectangles to be drawn on
+the grid. Should have columns \code{c_min}, \code{c_max}, \code{r_min}, \code{r_max} for
+coordinates, and optionally a grouping variable.}
+
+\item{add_cell_address}{Logical. If \code{TRUE}, adds cell addresses as text
+labels on the grid. Default is \code{FALSE}.}
 
 \item{allow_rc_df}{Logical. If \code{TRUE}, allows the input to be any rc_df.
 This is designed for mainly testing and development purposes. Default is

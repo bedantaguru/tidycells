@@ -2,60 +2,63 @@
 % Please edit documentation in R/core_preprocess_public.R
 \name{value_attribute_classify}
 \alias{value_attribute_classify}
-\title{Value-Attribute Classification for \code{cells} Objects}
+\title{Value and Attribute classification}
 \usage{
 value_attribute_classify(
   x,
-  method = c("probabilistic", "heuristic_type_1", "heuristic_type_2")
+  method = c("auto", "probabilistic", "simple_heuristic", "manual")
 )
 }
 \arguments{
-\item{x}{A valid \code{cells} object (see \linkS4class{cells}).}
+\item{x}{A \code{cells} object to be classified.}
 
-\item{method}{Character, one of \code{"probabilistic"}, \code{"heuristic_type_1"}, or
-\code{"heuristic_type_2"}. Controls the classification logic:
+\item{method}{Character; one of \code{"auto"}, \code{"probabilistic"},
+\code{"simple_heuristic"}, or \code{"manual"}. Controls which classification method
+is used:
 \describe{
-\item{\code{"probabilistic"}}{Uses probabilistic type inference, allowing ambiguous types
-(such as \code{"logical"}, \code{"categorical"}, \code{"date"}, and \code{"time"}) to be classified
-as either attribute or value based on conditional probability distributions. This is
-more resource-intensive but usually gives better result.}
-\item{\code{"heuristic_type_1"}}{Assumes that \code{"logical"}, \code{"categorical"}, \code{"date"}, and \code{"time"}
-types are almost always attributes (e.g., headers), assigning them \code{PoA = 1}, \code{PoV = 0}.
-(default)}
-\item{\code{"heuristic_type_2"}}{Assumes ambiguous types (\code{"logical"}, \code{"categorical"}, \code{"date"}, \code{"time"})
-may be either attribute or value, assigning both \code{PoA = 0.5}, \code{PoV = 0.5}.}
+\item{\code{"auto"}}{Selects the method automatically based on the size of \code{x}
+and presence of manual tags. (default)}
+\item{\code{"probabilistic"}}{Uses probabilistic inference to determine
+attribute/value likelihoods, especially for ambiguous types. More
+accurate but slower for large data.}
+\item{\code{"simple_heuristic"}}{Uses fast, rule-based logic. Suitable for
+large tables, less nuanced.}
+\item{\code{"manual"}}{Uses human-provided tags in \code{av_class_tag} if present.}
 }}
 }
 \value{
-The input \code{cells} object with updated or added columns: \code{type},
-\code{PoA}, and \code{PoV}.
+The original \code{cells} object, with the columns \code{type}, \code{PoA}, and
+\code{PoV} added or updated.
 }
 \description{
-Classifies each cell in a \code{cells} object as more likely to be an "attribute"
-(e.g., header or label) or a "value" (e.g., data entry), based on its content
-type and configurable heuristics. This function adds or updates the columns
-\code{type}, \code{PoA} (Probability of Attribute), and \code{PoV} (Probability of Value) in
-the supplied \code{cells} object. This supports tidy and semantic analysis of
-tabular data.
+\emph{Classify Cells as Attribute or Value in a \code{cells} Object:}
 }
 \details{
-This function is central to table structure learning and semantic
-table analysis. It uses robust heuristics and probabilistic methods
-(depending on \code{method}), but users may further adjust the resulting
-probabilities for custom logic. For details on the \code{cells} object structure
-and recognized formats, see \linkS4class{cells}.
+This function assigns to each cell in a \code{cells} object a classification of
+"attribute" (such as a header or label) or "value" (such as a data entry),
+using configurable heuristics or probabilistic logic. It updates or adds the
+columns \code{type}, \code{PoA} (probability of attribute), and \code{PoV} (probability of
+value) to the input object. This supports semantic and tidy table analysis.
+
+The function is essential for semantic table analysis and structure
+detection. Probabilities and type assignments can be further customized
+after classification. For more on the \code{cells} object format, see
+\linkS4class{cells}.
 }
-\section{Value-Attribute Classification}{
- The classification process uses the
-content of each cell (column \code{value}) and its initially read type (column
-\code{data_type}) to determine:
+\section{Classification Logic}{
+ The classification is based on cell content
+(\code{value} column) and its original type (\code{data_type} column). The columns
+added or updated are:
 \itemize{
-\item \code{type}: The refined content type, one of \code{"numeric"}, \code{"character"},
-\code{"logical"}, \code{"categorical"}, \code{"date"}, \code{"time"}, or \code{"blank"}.
-\item \code{PoA}: Probability (in \verb{[0,1]}) that the cell is an attribute.
-\item \code{PoV}: Probability (in \verb{[0,1]}) that the cell is a value.
+\item \code{type}: The detected or refined type of the cell, one of \code{"numeric"},
+\code{"character"}, \code{"logical"}, \code{"categorical"}, \code{"date"}, \code{"time"}, or
+\code{"blank"}.
+\item \code{PoA}: Probability (between 0 and 1) that the cell is an attribute
+(header/label).
+\item \code{PoV}: Probability (between 0 and 1) that the cell is a value (data
+entry).
 }
-The constraint \code{PoA + PoV <= 1} holds for all cells.
+It is always true that \code{PoA + PoV <= 1} for any cell.
 }
 
 \seealso{
