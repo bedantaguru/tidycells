@@ -23,7 +23,8 @@
 #' @param ... Reserved for future use or passed to methods.
 #' @param fixed_columns Character vector of column names that must be preserved
 #'   and not merged. If `NULL`, these are inferred as the intersection of column
-#'   names across all data frames.
+#'   names across all data frames. (These can not be like `^uncollated_` or
+#'   start with "uncollated_".)
 #' @param similarity_threshold Numeric between 0 and 1. Columns with similarity
 #'   above this threshold are considered for merging. Default is `0` (maximum
 #'   merging/stacking).
@@ -78,9 +79,19 @@ collate_columns.list <- function(x,
 #' @param dicard_cell_address A logical value indicating whether to discard cell
 #'   address columns (like `row`, `col`, `data_gid`) from the output. Default is
 #'   `TRUE`.
+#' @param detect_data_block_info_cols A logical value indicating whether to
+#'   detect data block info columns. These are columns at data_gid-level with at
+#'   max one distinct non-NA value and are not collated. Instead of naming them
+#'   as uncollated_1,2,3 etc., it will be named as info_1,2,3 etc. Default is
+#'   `TRUE`.
 #'
 #' @return A data frame with collated columns, where similar columns are merged
-#'   based on their similarity scores.
+#'   based on their similarity scores. The output data frame will contain the
+#'   `fixed_columns` without  `"data_gid", "row", "col"` columns if
+#'   `dicard_cell_address` is `TRUE`. If `detect_data_block_info_cols` is
+#'   `TRUE`, it will also detect data block info columns and rename them
+#'   accordingly to `info_xx` pattern. Apart from these `collated_xx` and
+#'   `uncollated_xx` columns will be present in the output.
 #'
 #' @keywords internal
 #' @export
@@ -89,17 +100,26 @@ collate_columns.cells_composition <- function(
     ...,
     fixed_columns = c("row", "col", "data_gid", "value","sheet_name"),
     similarity_threshold = 0,
-    dicard_cell_address = TRUE) {
+    dicard_cell_address = TRUE,
+    # This is used to detect data block info columns, which are columns at
+    # data_gid-level with at max one distinct non-NA value and are not collated.
+    # Instead of naming them as uncollated_1,2,3 etc., it will be named as
+    # info_1,2,3 etc.
+    detect_data_block_info_cols = TRUE) {
   # If the input is a cells_composition object, use specialized arguments
   if (dicard_cell_address) {
-    # Remove these columns from all nodes and all columns with ^cellAddress_
-    rem_columns <- c("row", "col", "data_gid")
+    # Remove these columns from all nodes
+    if (detect_data_block_info_cols) {
+      # The column data_gid is still required for later stage
+      rem_columns <- c("row", "col")
+    } else {
+      rem_columns <- c("row", "col", "data_gid")
+    }
+
     x <- x %>%
       purrr::map(function(df) {
         df %>%
-          dplyr::select(-dplyr::any_of(rem_columns),
-                        # May induce cellAddress_ columns from composition
-                        -dplyr::starts_with("cellAddress_"))
+          dplyr::select(-dplyr::any_of(rem_columns))
       })
 
     # Also remove these from fixed_columns
@@ -109,13 +129,75 @@ collate_columns.cells_composition <- function(
   dout <- collate_columns_lst(
     list_of_data = x,
     fixed_columns = fixed_columns,
-    similarity_threshold = similarity_threshold
+    similarity_threshold = similarity_threshold,
+    do_nice_ordering_of_output_cols = FALSE
   )
+
+  # Detection of data block info columns: (these are info columns at data-block
+  # level)
+  if (detect_data_block_info_cols) {
+    # Detect data block info columns:
+    #
+    # These are columns at data_gid-level with at max one distinct non-NA value
+    # and are not collated. Instead of naming them as uncollated_1,2,3 etc., it
+    # will be named as info_1,2,3 etc.
+
+    dout <- dout %>%
+      split(dout$data_gid) %>%
+      purrr::map_dfr(function(df) {
+        # Get the columns which are not collated
+
+        uncollated_cols <- colnames(df) %>%
+          stringr::str_detect("^uncollated_") %>%
+          which() %>% colnames(df)[.]
+
+        # Check which of such columns have maximum only 1 distinct non-NA value
+        info_cols <- df[uncollated_cols] %>%
+          purrr::map_lgl(function(col) {
+            # Get the unique non-NA values
+            unique_vals <- unique(col[!is.na(col)])
+            # Check if there is at most one distinct non-NA value
+            length(unique_vals) <= 1
+          })
+
+        # Rename these columns from uncollated_ to info_ in df
+
+        # Which columns to rename
+        cols_to_rename <- uncollated_cols[info_cols]
+        if (length(cols_to_rename) > 0) {
+          # Get their positions in colnames(df)
+          idx <- match(cols_to_rename, colnames(df))
+          # Assign new names
+          colnames(df)[idx] <- paste0(
+            "info_",
+            util_natural_segment_rank(cols_to_rename)
+          )
+        }
+
+        # Return modified data frame
+        df
+      })
+
+    # Now if `dicard_cell_address` is TRUE, we can remove the data_gid column.
+    if (dicard_cell_address) {
+      # Remove data_gid column if it is not needed
+      dout <- dout %>%
+        dplyr::select(-dplyr::any_of("data_gid"))
+    }
+
+  }
+
+  # Perform nice ordering of output columns
+  dout <- collate_col_nice_col_order(dout, fixed_columns = fixed_columns)
 
   # Minor column ordering:
   # Keep the value at the end and sort rest columns
   rest_col <- setdiff(colnames(dout), "value")
-  dout[c(rest_col[stringr::str_order(rest_col, numeric = TRUE)], "value")]
+  dout <- dout[
+    c(rest_col[stringr::str_order(rest_col, numeric = TRUE)], "value")]
+
+  dout
+
 }
 
 
@@ -143,17 +225,18 @@ collate_columns.cells_composition <- function(
 #'   based on their similarity scores.
 #' @keywords internal
 #' @export
-collate_columns.cells_analysis <- function(x,
-                                           ...,
-                                           fixed_columns = c("row", "col", "data_gid", "value"),
-                                           similarity_threshold = 0,
-                                           dicard_cell_address = TRUE) {
+collate_columns.cells_analysis <- function(
+    x,
+    ...,
+    fixed_columns = c("row", "col", "data_gid", "value"),
+    similarity_threshold = 0,
+    dicard_cell_address = TRUE,
+    detect_data_block_info_cols = TRUE) {
   # If the input is a cells_analysis object, use specialized arguments
 
   # First, compose the cells to get a list of data frames
   xc <- compose(
     x,
-    trace_composition = FALSE,
     simplify = FALSE)
 
   # Now, call the collate_columns function on the list of data frames
@@ -162,13 +245,16 @@ collate_columns.cells_analysis <- function(x,
     ...,
     fixed_columns = fixed_columns,
     similarity_threshold = similarity_threshold,
-    dicard_cell_address = dicard_cell_address
+    dicard_cell_address = dicard_cell_address,
+    detect_data_block_info_cols = detect_data_block_info_cols
   )
 }
 
-collate_columns_lst <- function(list_of_data,
-                                fixed_columns = NULL,
-                                similarity_threshold = 0) {
+collate_columns_lst <- function(
+    list_of_data,
+    fixed_columns = NULL,
+    similarity_threshold = 0,
+    do_nice_ordering_of_output_cols = TRUE) {
 
   # Check if list_of_data is a list
   if (!is.list(list_of_data)) {
@@ -193,12 +279,89 @@ collate_columns_lst <- function(list_of_data,
   list_of_data <- list_of_data[order(list_of_data_nc, decreasing = TRUE)]
 
   # Reduce the list of data frames by collating columns
-  purrr::reduce(
+  collate_col_0 <- purrr::reduce(
     list_of_data,
     collate_col_reduce_two_df,
     fixed_columns = fixed_columns,
     similarity_threshold = similarity_threshold
   ) %>% dplyr::distinct()
+
+  if(do_nice_ordering_of_output_cols){
+    collate_col_nice_col_order(collate_col_0, fixed_columns = fixed_columns)
+  } else {
+    collate_col_0
+  }
+
+}
+
+
+# Function to perform nice ordering of output columns
+collate_col_nice_col_order <- function(df, fixed_columns){
+
+  col_name_map <- tibble::tibble(
+    colname = colnames(df),
+    seq = 1:NCOL(df)
+  )
+
+  col_name_map <- col_name_map %>%
+    dplyr::mutate(is_fixed = .data$colname %in% fixed_columns)
+
+  these_cols <- col_name_map$colname[!col_name_map$is_fixed]
+  df_stats <- df[these_cols] %>%
+    purrr::imap_dfr(function(x, idx){
+      tibble::tibble(
+        colname = idx,
+        num_vals = sum(!is.na(x)),
+        num_distinct = dplyr::n_distinct(x))
+    })
+
+  col_name_map <- col_name_map %>%
+    dplyr::left_join(df_stats, by = "colname")
+
+
+  # For Fixed columns dummy 1 is filled.
+  col_name_map$num_distinct[is.na(col_name_map$num_distinct)] <- 1
+  col_name_map$num_vals[is.na(col_name_map$num_vals)] <- 1
+
+  col_name_map <- col_name_map %>%
+    dplyr::mutate(
+      prefix = ifelse(
+        .data$is_fixed,
+        "_FIXED_",
+        stringr::str_extract(.data$colname,"^[a-zA-Z0-9]+_")
+      ))
+
+  col_name_map <- col_name_map %>%
+    dplyr::group_by(.data$prefix) %>%
+    dplyr::mutate(
+      frac_vals = .data$num_vals/max(.data$num_vals),
+      frac_distinct = .data$num_distinct/max(.data$num_distinct)) %>%
+    dplyr::mutate(
+      ord_score = (1-.data$frac_distinct)*0.4 + (.data$frac_vals)*0.8,
+      new_rank = rank(-.data$ord_score, ties.method = "first")) %>%
+    dplyr::ungroup()
+
+  col_name_map <- col_name_map %>%
+    dplyr::mutate(
+      new_colname = ifelse(
+        .data$is_fixed,
+        .data$colname,
+        paste0(.data$prefix, .data$new_rank)))
+
+  col_name_map <- col_name_map %>%
+    dplyr::arrange(.data$seq)
+
+  dfo <- df
+
+  colnames(dfo) <- col_name_map$new_colname
+
+  # Retain fixed column in the beginning
+  this_seq <- c(
+    sort(col_name_map$new_colname[col_name_map$is_fixed]),
+    sort(col_name_map$new_colname[!col_name_map$is_fixed])
+  )
+
+  dfo[this_seq]
 
 }
 
@@ -239,7 +402,7 @@ collate_col_reduce_two_df <- function(df1, df2,
     n1 = names(cr1),
     n2 = names(cr2), stringsAsFactors = FALSE)
 
-  all_pairs$similarity_score <- seq(NROW(all_pairs)) %>%
+  all_pairs$similarity_score <- seq_len(NROW(all_pairs)) %>%
     purrr::map_dbl(
       function(idx){
         collate_col_similarity_score(

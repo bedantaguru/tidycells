@@ -27,7 +27,7 @@
 #'   is done across all sheets together. If \code{FALSE}, columns are collated
 #'   per sheet independently. Default from package option if missing.
 #' @param show_progress Logical. Display progress bar during multi-stage
-#'   processing. Default is \code{TRUE}.
+#'   processing. Default is \code{finalize_through_stages} value.
 #'
 #' @details The main workflow is as follows:
 #' \enumerate{
@@ -77,7 +77,7 @@ read_cells <- function(
   finalize_till,
   # Default is TRUE, if FALSE then collate columns on each sheets separately
   collate_columns_on_whole,
-  show_progress = TRUE) {
+  show_progress = finalize_through_stages) {
 
   # If missing file, return NULL
   if (missing(file) || is.null(file)) {
@@ -202,7 +202,6 @@ read_cells <- function(
         # sheets
 
         # Attach sheet names to the composed sheets
-        sheet_names <- names(this_sheets_comp)
 
         # Tag the composed sheets with their sheet names
         this_sheets_comp_tagged <- purrr::imap(

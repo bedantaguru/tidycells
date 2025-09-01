@@ -424,3 +424,264 @@ util_rect_intersect_filter <- function(rcd1, rcd2, boundary){
 util_area_of_rect <- function(r1, c1, r2, c2) {
   (abs(r1 - r2) + 1) * (abs(c1 - c2) + 1)
 }
+
+
+# Section : "Mostly used in Shiny" - functions ----
+
+# Below functions which are mostly used in Shiny modules but can be used in
+# generic use also
+
+# Get the names of all attached packages in the search path
+util_attached_packages <- function() {
+  pkgs <- grep("^package:", search(), value = TRUE)
+  sub("^package:", "", pkgs)
+}
+
+# Detach a package if it is attached to the search path
+util_detach_pkg_if_attached <- function(pkg, unload = FALSE) {
+  # Detach a package if it is attached to the search path.
+  pkg_names <- paste0("package:", pkg)
+  attached <- pkg_names[pkg_names %in% search()]
+  lapply(attached, function(p) detach(p, unload = unload, character.only = TRUE))
+  invisible(0)
+}
+
+
+# Convert cells_analysis to a near cells object (rc-df) like for plotting. Used
+# in plot.cells_analysis.
+util_convert_cells_analysis_for_plot <- function(
+    ca,
+    attr_cols = c("data_gid", "nice_header_name", "header_orientation_tag"),
+    focus_on_data_blocks = NULL,
+    color_attrs_separately = FALSE,
+    show_values_in_cells = FALSE) {
+  # Convert cells_analysis to a cells object like for plotting.
+
+
+  # Step 1: Process the attribute data map
+  # First extract the attribute data
+  attr_data <- ca$attr_data_map
+
+  if(!is.null(focus_on_data_blocks)) {
+    # If focus_on_data_blocks is provided, filter the attr_data_map
+    attr_data <- attr_data %>%
+      dplyr::filter(.data$data_gid %in% focus_on_data_blocks)
+  }
+
+  # Select specified columns and combine them with ":" separator
+  # (avoiding the dot notation)
+  if (!show_values_in_cells){
+    # In case cells value is not requested, then we can create values for plot
+    # which are specific to cells-analysis
+    selected_columns <- dplyr::select(attr_data, dplyr::all_of(attr_cols))
+    combined_values <- apply(selected_columns, 1, paste, collapse = ":")
+  } else {
+    # If show_values_in_cells is TRUE, then we need to use the value column
+    # from original data later. Here creating a dummy combined_values.
+    combined_values <- ""
+  }
+
+
+  # Create attribute data with combined values
+  if(color_attrs_separately) {
+    # If color_attrs_separately is TRUE, then we need to create a tag for each
+    # attribute groups to mark them differently in plot.
+    attr_data_with_combined_values <- attr_data %>%
+      dplyr::group_by(.data$data_gid) %>%
+      dplyr::mutate(tag=util_hierarchical_rank(.data$attr_gid)) %>%
+      dplyr::ungroup() %>%
+      # create attr_1 attr_2 etc. based on tag
+      dplyr::mutate(val = combined_values, type = paste0("attr_", .data$tag)) %>%
+      # Extract only the necessary columns for the plot
+      dplyr::distinct(.data$row, .data$col, value = .data$val, .data$type)
+
+    # Create a scale_fill_map for the attributes
+    all_attrs  <- unique(attr_data_with_combined_values$type)
+    # We can order them nicely based on the natural segment rank
+    all_attrs <- all_attrs[order(util_natural_segment_rank(all_attrs))]
+    # Create color-ramp
+    pal <- grDevices::colorRampPalette(
+      c("#F8766D","#F2E88A")
+    )
+    scale_fill_map <- pal(length(all_attrs))
+    names(scale_fill_map) <- all_attrs
+
+    # Add color for data blocks
+    scale_fill_map <- c(c(data = "#00BFC4"), scale_fill_map)
+
+  } else {
+    # Otherwise, just take the values without creating separate tags
+    attr_data_with_combined_values <- attr_data %>%
+      dplyr::mutate(val = combined_values) %>%
+      # Extract only the necessary columns for the plot
+      dplyr::distinct(.data$row, .data$col, value = .data$val, type = "attr")
+
+    scale_fill_map <- NULL
+  }
+
+
+  # Step 2: Prepare the data blocks
+  # Extract the relevant columns from data_blocks
+
+  if(!is.null(focus_on_data_blocks)) {
+    # If focus_on_data_blocks is provided, filter the data_blocks
+    data_blocks_this <- ca$data_blocks %>%
+      dplyr::filter(.data$data_gid %in% focus_on_data_blocks)
+  } else {
+    # Otherwise, use the entire data_blocks
+    data_blocks_this <- ca$data_blocks
+  }
+
+  # Format the data blocks for plotting
+  data_blocks_this <- data_blocks_this %>%
+    dplyr::distinct(.data$row, .data$col, value = .data$data_gid, type = "data")
+
+
+  # Step 3: Combine both data-sets
+  combined_data <- dplyr::bind_rows(
+    attr_data_with_combined_values,
+    data_blocks_this
+  )
+
+  # Display original cells values in the cells instead of the cell analysis
+  # induced fields
+  if (show_values_in_cells) {
+    # If show_values_in_cells is TRUE, then we need to show the values in cells
+    # i.e. the value column should contain the actual values from data_blocks
+    combined_data <- combined_data %>%
+      dplyr::select(-"value") %>%
+      dplyr::left_join(
+        ca$original_sheet[c("row","col","value")],
+        by = c("row", "col")) %>%
+      dplyr::group_by(.data$row, .data$col) %>%
+      # Take one from each group
+      dplyr::slice(1) %>%
+      dplyr::ungroup()
+  }
+
+
+  return(list(combined_data = combined_data,
+              scale_fill_map = scale_fill_map))
+}
+
+
+# Trackback utility functions ----
+util_get_traceback_composition <- function(ca){
+
+  ca_trace <- ca
+
+  ca_trace$original_sheet <- ca_trace$original_sheet %>%
+    dplyr::mutate(value = .data$row + 1i *.data$col )
+
+  lout <- list(source = ca$original_sheet)
+
+  lout$comp_orig <- compose(ca, simplify = FALSE)
+  lout$comp_trace <- compose(ca_trace)
+
+  lout$comp_orig_collate <- collate_columns(
+    lout$comp_orig,
+    dicard_cell_address = FALSE)
+
+  lout$comp_orig <- dplyr::bind_rows(
+    unclass(lout$comp_orig)
+  )
+
+  lout
+
+}
+
+util_traceback <- function(
+    cell_row , cell_col, traceback_render,
+    do_collated = TRUE) {
+
+  this_row_in_composition <- traceback_render$comp_trace %>%
+    dplyr::filter(.data$row == cell_row & .data$col == cell_col)
+
+  # Early return if no row found
+  if (NROW(this_row_in_composition) == 0) {
+    return(NULL)
+  }
+
+  # Initialize output list
+  lout <- list()
+
+  # Remove data_gid, row, col and value
+  lout$connected_cells <- this_row_in_composition %>%
+    dplyr::select(-"data_gid", -"row", -"col", -"value") %>%
+    tidyr::pivot_longer(
+      cols = tidyr::everything(),
+      names_to = "colname",
+      values_to = "cell_address"
+    ) %>%
+    dplyr::mutate(row = Re(.data$cell_address),
+                  col = Im(.data$cell_address)) %>%
+    dplyr::select(-"cell_address")
+
+  # Now do for collated composition (this is little bit different as collate
+  # column reply on cell contents)
+
+  if(do_collated){
+
+    this_row_in_collated_composition <- traceback_render$comp_orig_collate %>%
+      dplyr::filter(.data$row == cell_row & .data$col == cell_col)
+
+    connected_collated_cells <- this_row_in_collated_composition %>%
+      dplyr::select(-"data_gid", -"row", -"col", -"value") %>%
+      tidyr::pivot_longer(
+        cols = tidyr::everything(),
+        names_to = "colname",
+        values_to = "value"
+      )
+
+    # A Special Join:
+    # In order to do join but retaining all cells (in case value has same string)
+    # following adjustment is required
+
+    # See this:-
+    #
+    # df1 <- data.frame(name =c("x1","x2","x3"), value = c("a","a","b")) df2 <-
+    # data.frame(value = c("a","a","b"), row= c(1,2,3), col=c(3,4,4))
+    #
+    # df1 <- df1 %>% dplyr::group_by(.data$value) %>% dplyr::mutate(idx =
+    # dplyr::row_number()) df2 <- df2 %>% dplyr::group_by(.data$value) %>%
+    # dplyr::mutate(idx = dplyr::row_number())
+    #
+    # df1 %>% dplyr::left_join(df2, by = c("value","idx")) %>%
+    # dplyr::select(-"idx") %>% dplyr::ungroup()
+
+    connected_cells_with_value <- lout$connected_cells %>%
+      dplyr::inner_join(traceback_render$source[c("row","col","value")],
+                        by = c("row","col"))
+
+    connected_cells_with_value <- connected_cells_with_value %>%
+      dplyr::group_by(.data$value) %>%
+      dplyr::mutate(idx = dplyr::row_number()) %>%
+      dplyr::ungroup()
+
+    connected_collated_cells_with_value <- connected_collated_cells %>%
+      dplyr::filter(!is.na(.data$value)) %>%
+      dplyr::group_by(.data$value) %>%
+      dplyr::mutate(idx = dplyr::row_number()) %>%
+      dplyr::ungroup()
+
+    connected_collated_cells_with_value <- connected_collated_cells_with_value %>%
+      dplyr::left_join(
+        connected_cells_with_value[c("row","col","value","idx")],
+        by = c("value", "idx")
+      ) %>%
+      dplyr::select(-"idx")
+
+    # Join back with connected_collated_cells
+    lout$connected_collated_cells <- connected_collated_cells %>%
+      dplyr::left_join(
+        connected_collated_cells_with_value[c("colname", "row", "col")],
+        by = c("colname")
+      ) %>%
+      dplyr::distinct()
+  }
+
+
+  return(lout)
+
+}
+

@@ -61,13 +61,9 @@ core_as_cells_internal.default <- function(
     }
   }
 
-
   nrows <- NROW(df)
   ncols <- NCOL(df)
-
-  row_names <- rownames(df)
-  col_names <- colnames(df)
-
+  
   col_offset <- if (include_rownames) 1L else 0L
   row_offset <- if (include_colnames) 1L else 0L
 

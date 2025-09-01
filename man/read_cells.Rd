@@ -9,7 +9,7 @@ read_cells(
   finalize_through_stages,
   finalize_till,
   collate_columns_on_whole,
-  show_progress = TRUE
+  show_progress = finalize_through_stages
 )
 }
 \arguments{
@@ -31,7 +31,7 @@ is done across all sheets together. If \code{FALSE}, columns are collated
 per sheet independently. Default from package option if missing.}
 
 \item{show_progress}{Logical. Display progress bar during multi-stage
-processing. Default is \code{TRUE}.}
+processing. Default is \code{finalize_through_stages} value.}
 }
 \value{
 A \code{sheets} object or a processed list of cell/cell composition

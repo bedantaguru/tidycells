@@ -9,7 +9,8 @@
   ...,
   fixed_columns = c("row", "col", "data_gid", "value"),
   similarity_threshold = 0,
-  dicard_cell_address = TRUE
+  dicard_cell_address = TRUE,
+  detect_data_block_info_cols = TRUE
 )
 }
 \arguments{

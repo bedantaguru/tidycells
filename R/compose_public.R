@@ -12,8 +12,6 @@
 #' @param simplify Logical. If `TRUE` (default), returns a single data frame of
 #'   stitched cells. If `FALSE`, returns a list of data frames (composition of
 #'   cells) for further processing (like collate columns).
-#' @param trace_composition Logical. If `TRUE`, adds trace columns to the output
-#'   indicating header-cell associations (for debugging or advanced tracing).
 #'
 #' @return If `simplify = TRUE`, a data frame of stitched cells; otherwise, a
 #'   list of data frames of class `core_cells_composition_class`.
@@ -27,7 +25,7 @@
 #' returned and a warning is issued.
 #'
 #' @export
-compose <- function(ca, simplify = TRUE, trace_composition = FALSE) {
+compose <- function(ca, simplify = TRUE) {
 
   # compose is a wrapper function to compose cells from a cell-analysis
   # object (ca) and returns a data frame with stitched cells.
@@ -80,11 +78,7 @@ compose <- function(ca, simplify = TRUE, trace_composition = FALSE) {
       # node is a list of data frames, each corresponding to an attribute
       # For each attribute node, perform stitching with the relevant attribute and data.
       purrr::map(node, function(adm_part) {
-        compose_stitch_direction(
-          adm_part, this_d_dat,
-          # The `trace_composition` as passed to `trace_it` is a flag to trace
-          # the composition (which header tagged with which value)
-          trace_it = trace_composition)
+        compose_stitch_direction(adm_part, this_d_dat)
       })
     })
 
@@ -125,7 +119,7 @@ compose <- function(ca, simplify = TRUE, trace_composition = FALSE) {
 
 # Helper function to stitch data and attribute cells together based on
 # attribute-data mapping and direction.
-compose_stitch_direction <- function(adm_part, d_dat_part, trace_it = FALSE) {
+compose_stitch_direction <- function(adm_part, d_dat_part) {
 
   # Note: A de-normalized form is used in amd_part here HOT is assigned. But
   # we'll leave it as it is.
@@ -142,23 +136,11 @@ compose_stitch_direction <- function(adm_part, d_dat_part, trace_it = FALSE) {
   attr_name <- adm_part$nice_header_name[1]
   direction <- adm_part$header_orientation_tag[1]
 
-  # If tracing is enabled, add a complex cell address column for debugging.
-  if (trace_it) {
-    # Store it ar complex number row+col*1i
-    a0 <- a0 %>% dplyr::mutate(cell_address = (.data$row + .data$col * 1i))
-  }
-
   # Attach headers to data block cells according to orientation and address.
   d1 <- attach_header(dat = d0, hdr = a0, direction = direction)
 
   # Rename the attached attribute column to the friendly attribute name.
   colnames(d1)[which(colnames(d1) == "attr_value")] <- attr_name
-
-  # If tracing, also rename the trace column for this attribute.
-  if (trace_it) {
-    colnames(d1)[which(colnames(d1) == "cell_address")] <-
-      paste0("cellAddress_", attr_name)
-  }
 
   d1
 }

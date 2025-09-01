@@ -1,15 +1,3 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
-^LICENSE\.md$
-^\.travis\.yml$
-^appveyor\.yml$
-^codecov\.yml$
-^README\.Rmd$
-^doc$
-^Meta$
-^cran-comments\.md$
-^dev-notes\.md$
-^logo\.png$
-^_pkgdown\.yml$
-^docs$
-^pkgdown$
+^servicing/$

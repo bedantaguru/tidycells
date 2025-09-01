@@ -431,7 +431,7 @@ infer_calc_stats_for_admap_dimwise <- function(
   # Special normalization to ensure that `dim_len_cont` is comparable
   d_ad_agg <- d_ad_agg %>%
     dplyr::group_by(.data$data_gid, .data$direction_group) %>%
-    dplyr::mutate(dim_len_cont = dim_len_cont/max(dim_len_cont)) %>%
+    dplyr::mutate(dim_len_cont = .data$dim_len_cont/max(.data$dim_len_cont)) %>%
     dplyr::ungroup()
 
   # 6. Remove incomplete cases (NA removal)
@@ -1358,14 +1358,14 @@ infer_get_direction_stats_basic <- function(
     # attr_gid-cell pair (data_gid,row, col, attr_gid)
     ad_comb2 <- ad_comb %>%
       dplyr::group_by(.data$row, .data$col, .data$attr_gid, .data$data_gid) %>%
-      dplyr::filter(dist == min(dist)) %>%
+      dplyr::filter(.data$dist == min(.data$dist)) %>%
       dplyr::ungroup()
 
 
     # Now each cells of attribute_gid to choose near most data_gid cell wise
     ad_comb3 <- ad_comb2 %>%
       dplyr::group_by(.data$row, .data$col, .data$attr_gid) %>%
-      dplyr::filter(dist == min(dist)) %>%
+      dplyr::filter(.data$dist == min(.data$dist)) %>%
       # if still multiple data_gid, then choose first one
       dplyr::slice(1) %>%
       dplyr::ungroup()
@@ -2334,3 +2334,297 @@ infer_bounding_L_shape_unit_for_a_dir <- function(df, direction) {
       area = corner_pin$area
     )
 }
+
+
+# Section: Modifications to Cells-Analysis Object ----
+
+
+#' Modify cell analysis based on relationships between data and attribute blocks
+#'
+#' @description An internal utility function that allows for modifications of
+#'   cell analysis objects based on the relationship between two points (data or
+#'   attribute blocks). It supports operations like joining data blocks,
+#'   connecting attributes to data blocks, detaching attributes, and changing
+#'   header orientation tags.
+#'
+#' @param ca A cell analysis object to be modified
+#' @param point_1 A point object containing type (data or attr) and which
+#'   (row/column position)
+#' @param point_2 A point object containing type (data or attr) and which
+#'   (row/column position)
+#' @param return_actions Logical; if TRUE returns possible actions instead of
+#'   modifying the object
+#' @param do_action Character; the action to perform ("join", "connect",
+#'   "detach", "change_HOT")
+#' @param HOT_to Character; new header orientation tag value when changing HOT
+#'
+#' @return If return_actions is TRUE, returns a character vector of possible
+#'   actions (also include conflict indication like
+#'   "conflict_multiple_selection"). Otherwise, returns a modified cell analysis
+#'   object.
+#'
+#' @keywords internal
+infer_util_cells_analysis_modification <- function(
+    ca, point_1, point_2, return_actions = FALSE,
+    do_action = "none",
+    HOT_to = NULL) {
+
+  # Initialize actions variable
+  actions <- NULL
+
+  # Early return if either point is empty
+  if(NROW(point_1$which) == 0 || NROW(point_2$which) == 0) {
+    return(if(return_actions) actions else ca)
+  }
+
+  # Ensure points have only one row
+  point_1$which <- point_1$which[1, ]
+  point_2$which <- point_2$which[1, ]
+
+  # If returning actions, no need to perform any
+  if(return_actions) do_action <- "none"
+
+  # Helper function to wrap common return pattern
+  wrap_result <- function(ca_mod) {
+    class(ca_mod) <- core_cells_analysis_class
+    return(ca_mod)
+  }
+
+  # Helper to extract data/attr GIDs based on point type
+  get_gid <- function(point) {
+    if(point$type == "data") {
+      ca$data_blocks %>%
+        dplyr::filter(
+          .data$row == point$which$row,
+          .data$col == point$which$col) %>%
+        dplyr::pull(.data$data_gid)
+    } else {
+      ca$attr_data_map %>%
+        dplyr::filter(
+          .data$row == point$which$row,
+          .data$col == point$which$col) %>%
+        dplyr::pull(.data$attr_gid)
+    }
+  }
+
+  # Extract GIDs based on point types
+  gid1 <- get_gid(point_1)
+  gid2 <- get_gid(point_2)
+
+  # Check if gid1 and gid2 are of length 1, if not, check if they are linked
+  if(length(gid1)>1 || length(gid2)>1){
+    # Attempt to find a common gid in attr_data_map
+    # This is to handle cases where multiple GIDs are returned
+    con_chk <- ca$attr_data_map %>%
+      dplyr::filter(
+        .data$attr_gid %in% c(gid1, gid2),
+        .data$data_gid %in% c(gid1, gid2)) %>%
+      dplyr::distinct(.data$attr_gid, .data$data_gid)
+    if(NROW(con_chk)==1) {
+      gid1 <- gid1 %>% intersect(as.character(con_chk[1,]))
+      gid2 <- gid2 %>% intersect(as.character(con_chk[1,]))
+    }
+  }
+
+  # if gid1 and gid2 are still not of length 1, it means multiple selections or
+  # no valid selection was made, so we return a conflict action(its not actually
+  # action rather a message)
+  if(length(gid1)>1 || length(gid2)>1) {
+    # Early return with
+    actions <- "conflict_multiple_selection"
+    # Default case: return original ca or actions
+    return(if(return_actions) actions else ca)
+  }
+
+  if(gid1 == gid2){
+    # Early return with
+    actions <- "conflict_same_selection"
+    # Default case: return original ca or actions
+    return(if(return_actions) actions else ca)
+  }
+
+  # Case 1: Both points are data blocks
+  if(point_1$type == "data" && point_2$type == "data") {
+    if(gid1 != gid2) {
+      # If both data blocks are different, can perform join action
+      actions <- c("join")
+
+      if(do_action == "join") {
+
+        # Join the two data blocks
+        data_join_map <- tibble::tibble(data_gid = c(gid1, gid2)) %>%
+          dplyr::mutate(data_gid_to = min(.data$data_gid))
+
+        ca_out <- infer_util_gid_join(
+          gid_join_map = data_join_map,
+          gid_linked_list_of_df = ca[c("attr_data_map", "data_blocks")],
+          gid_tag = "data_gid")
+
+        ca_out$original_sheet <- ca$original_sheet
+
+        # Fix for attr_data_map for nice_header_name which need to be unique per
+        # attribute block within a data-block connected scope.
+        ca_out <- infer_util_cells_analysis_fix_nice_header_name(
+          ca_out,
+          this_data_gid = data_join_map$data_gid_to[1])
+
+        return(wrap_result(ca_out))
+      }
+    }
+  }
+
+  # Case 2: One point is data and one is attr
+  if((point_1$type == "data" && point_2$type == "attr") ||
+     (point_1$type == "attr" && point_2$type == "data")) {
+
+    # Ensure data_gid and attr_gid are correctly assigned
+    if(point_1$type == "data") {
+      data_gid_this <- gid1
+      attr_gid_this <- gid2
+    } else {
+      data_gid_this <- gid2
+      attr_gid_this <- gid1
+    }
+
+    # Check if these are already linked
+    this_existing_map <- ca$attr_data_map %>%
+      dplyr::filter(.data$attr_gid == attr_gid_this & .data$data_gid == data_gid_this)
+
+    if(NROW(this_existing_map) > 0) {
+      # If linked already, can detach or change HOT
+      actions <- c("detach", "change_HOT")
+    } else {
+      # If not linked, can connect
+      actions <- c("connect")
+    }
+
+    if(do_action %in% actions) {
+      ca_out <- ca  # Create modified copy
+
+      if(do_action == "connect") {
+
+        # Connect attribute block to data block
+        attr_data_map_part <- ca$attr_data_map %>%
+          dplyr::filter(.data$attr_gid == attr_gid_this) %>%
+          dplyr::mutate(
+            data_gid = data_gid_this,
+            header_orientation_tag = ifelse(
+              !is.null(HOT_to),
+              HOT_to[1],
+              util_most_frequent(.data$header_orientation_tag)
+            ),
+            nice_header_name = util_most_frequent(.data$nice_header_name)
+          ) %>%
+          dplyr::distinct()
+
+        ca_out$attr_data_map <- ca_out$attr_data_map %>%
+          dplyr::bind_rows(attr_data_map_part) %>%
+          dplyr::distinct()
+
+        # Fix for attr_data_map for nice_header_name which need to be unique per
+        # attribute block within a data-block connected scope.
+        ca_out <- infer_util_cells_analysis_fix_nice_header_name(
+          ca_out,
+          this_data_gid = data_gid_this)
+
+        return(wrap_result(ca_out))
+      }
+
+      if(do_action == "detach") {
+        disjoin <- tibble::tibble(data_gid = data_gid_this, attr_gid = attr_gid_this)
+        ca_out$attr_data_map <- ca_out$attr_data_map %>%
+          dplyr::anti_join(disjoin, by = c("data_gid", "attr_gid"))
+
+        return(wrap_result(ca_out))
+      }
+
+      if(do_action == "change_HOT" && !is.null(HOT_to)) {
+        ca_out$attr_data_map$header_orientation_tag[
+          ca_out$attr_data_map$data_gid == data_gid_this &
+            ca_out$attr_data_map$attr_gid == attr_gid_this
+        ] <- HOT_to
+
+        return(wrap_result(ca_out))
+      }
+    }
+  }
+
+  # Case 3: Both points are attribute blocks
+  if(point_1$type == "attr" && point_2$type == "attr") {
+    if(gid1 != gid2) {
+      # If both attribute blocks are different, can perform join
+      actions <- c("join")
+
+      if(do_action == "join") {
+        # Join the two attribute blocks
+        attr_join_map <- tibble::tibble(attr_gid = c(gid1, gid2)) %>%
+          dplyr::mutate(attr_gid_to = min(.data$attr_gid))
+
+        ca_out <- infer_util_gid_join(
+          gid_join_map = attr_join_map,
+          gid_linked_list_of_df = ca[c("attr_data_map")],
+          gid_tag = "attr_gid")
+
+        # Fix multiple nice_header_name and header_orientation_tag
+        ca_out$attr_data_map <- ca_out$attr_data_map %>%
+          dplyr::group_by(.data$attr_gid, .data$data_gid) %>%
+          dplyr::mutate(
+            nice_header_name = util_most_frequent(.data$nice_header_name),
+            header_orientation_tag = util_most_frequent(.data$header_orientation_tag)
+          ) %>%
+          dplyr::ungroup() %>%
+          dplyr::distinct()
+
+        # Restore data blocks and original sheet
+        ca_out$data_blocks <- ca$data_blocks
+        ca_out$original_sheet <- ca$original_sheet
+
+        return(wrap_result(ca_out))
+      }
+    }
+  }
+
+  # Default case: return original ca or actions
+  return(if(return_actions) actions else ca)
+}
+
+
+# Helper function for ensuring unique nice_header_name per data-block connection
+# for each attr_gids
+infer_util_cells_analysis_fix_nice_header_name <- function(
+    ca_out, this_data_gid) {
+
+  if(missing(this_data_gid)){
+    this_data_gid <- unique(ca_out$data_blocks$data_gid)
+  }
+
+  # Fix for attr_data_map for nice_header_name which need to be unique per
+  # attribute block within a data-block connected scope.
+  attr_data_map_this_d <- ca_out$attr_data_map %>%
+    dplyr::filter(.data$data_gid %in% this_data_gid)
+  attr_data_map_rest <- ca_out$attr_data_map %>%
+    dplyr::filter(!(.data$data_gid %in% this_data_gid))
+
+  # Recreate new nice_header_name from old nice_header_name
+  nice_header_name_map <- attr_data_map_this_d %>%
+    dplyr::distinct(.data$attr_gid,
+                    nice_header_name_old = .data$nice_header_name) %>%
+    dplyr::mutate(
+      nice_header_name =
+        util_make_unique_minimal(.data$nice_header_name_old)) %>%
+    dplyr::select(c("attr_gid","nice_header_name"))
+
+  # Replace these new names only for this data block
+  attr_data_map_this_d <- attr_data_map_this_d %>%
+    dplyr::select(-"nice_header_name") %>%
+    dplyr::left_join(nice_header_name_map, by = "attr_gid")
+
+  # Finally update in ca output
+  ca_out$attr_data_map <- attr_data_map_this_d %>%
+    dplyr::bind_rows(attr_data_map_rest) %>%
+    dplyr::distinct() %>%
+    dplyr::arrange(.data$data_gid, .data$attr_gid)
+
+  return(ca_out)
+}
+

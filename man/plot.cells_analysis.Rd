@@ -9,7 +9,10 @@
   ...,
   attr_cols = c("data_gid", "nice_header_name", "header_orientation_tag"),
   max_txt_len = 18,
-  txt_size = 2.5
+  txt_size = 2.5,
+  focus_on_data_blocks = NULL,
+  color_attrs_separately = FALSE,
+  show_values_in_cells = FALSE
 )
 }
 \arguments{
@@ -24,6 +27,17 @@ separator}
 truncation. Default is 18.}
 
 \item{txt_size}{Numeric. Text size for cell labels. Default is 2.5.}
+
+\item{focus_on_data_blocks}{Character vector. If provided, filters the
+analysis to only include specified data blocks (by their \code{data_gid}).
+Default is \code{NULL}, which means all data blocks are included.}
+
+\item{color_attrs_separately}{Logical. If \code{TRUE}, colors attributes
+separately based on their hierarchical rank. If \code{FALSE}, all attributes
+gets same color. Default is \code{FALSE}.}
+
+\item{show_values_in_cells}{Logical. If \code{TRUE}, displays the actual values in
+cells instead of the cells-analysis info. Default is \code{FALSE}.}
 }
 \value{
 Invisibly returns the \code{ggplot} object for further customization

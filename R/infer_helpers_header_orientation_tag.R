@@ -485,7 +485,7 @@ infer_define_nice_header_names_single <- function(admap, d_dat) {
       .data$nice_header_name_pt1, .data$nice_header_name_pt2) %>%
     dplyr::mutate(
       # Create a unique index for each combination of pt1 and pt2 based on
-      # split_tag orderhttp://127.0.0.1:33351/graphics/plot_zoom_png?width=1920&height=1009
+      # split_tag order
       nice_header_name_pt3 = util_hierarchical_rank(
         # opposite order for less relative_dimension_fraction rank will be more
         -.data$relative_dimension_fraction,

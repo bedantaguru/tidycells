@@ -14,7 +14,8 @@ list of data frames).}
 
 \item{fixed_columns}{Character vector of column names that must be preserved
 and not merged. If \code{NULL}, these are inferred as the intersection of column
-names across all data frames.}
+names across all data frames. (These can not be like \verb{^uncollated_} or
+start with "uncollated_".)}
 
 \item{similarity_threshold}{Numeric between 0 and 1. Columns with similarity
 above this threshold are considered for merging. Default is \code{0} (maximum

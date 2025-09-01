@@ -11,7 +11,7 @@
 #'   "direct" (universal)
 #' @return Data frame with attached header columns (with "_hdr" suffix)
 #' @keywords internal
-attach_header <- function(dat, hdr, direction = c("v","h","vl","vr","vm","hu","hd","hm","direct")) {
+attach_header <- function(dat, hdr, direction = c("v","h","vl","vr","vm","hu","hd","hm","direct","nothing")) {
   # If hdr is empty, return dat unchanged
   if (NROW(hdr) == 0) return(dat)
 

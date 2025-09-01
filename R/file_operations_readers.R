@@ -283,8 +283,8 @@ file_op_read_pdf_table_using_tabula <- function(fn) {
     degen_l <- any(dim_l < 2)
     degen_s <- any(dim_s < 2)
 
-    if (degen_l & !degen_s) return(stream_tbl)
-    if (degen_s & !degen_l) return(lattice_tbl)
+    if (degen_l && !degen_s) return(stream_tbl)
+    if (degen_s && !degen_l) return(lattice_tbl)
 
     # Heuristic 2: Prefer the table with fewer NAs. A high NA count suggests the
     # extraction included empty space around the table.
@@ -347,8 +347,8 @@ file_op_read_txt <- function(fn, omit = NULL) {
     d_out <- file_op_read_attempt(file_op_read_html_table, fn)
   }
 
-  if(!util_convertible_to_processable(d_out) &
-     !("csv" %in% omit) & !("tsv" %in% omit)) {
+  if(!util_convertible_to_processable(d_out) &&
+     !("csv" %in% omit) && !("tsv" %in% omit)) {
     d_out <- file_op_read_attempt(file_op_read_delim, fn)
   }
 
@@ -363,7 +363,7 @@ file_op_read_xlsx_docx <- function(fn, omit = NULL){
     d_out <- file_op_read_attempt(file_op_read_xlsx, fn)
   }
 
-  if(!util_convertible_to_processable(d_out) &
+  if(!util_convertible_to_processable(d_out) &&
      !("docx" %in% omit)) {
     d_out <- file_op_read_attempt(file_op_read_docx_table, fn)
   }
@@ -379,7 +379,7 @@ file_op_read_xls_doc <- function(fn, omit = NULL){
     d_out <- file_op_read_attempt(file_op_read_xls, fn)
   }
 
-  if(!util_convertible_to_processable(d_out) &
+  if(!util_convertible_to_processable(d_out) &&
      !("doc" %in% omit)) {
     d_out <- file_op_read_attempt(file_op_read_doc_table, fn)
   }

@@ -8,6 +8,7 @@
   x,
   ...,
   fill,
+  fill_alpha = 1,
   ignore_validation = FALSE,
   no_fill = FALSE,
   txt_size = 3,
@@ -17,7 +18,14 @@
   no_plot = FALSE,
   boundaries = NULL,
   add_cell_address = FALSE,
-  allow_rc_df = FALSE
+  no_legend = TRUE,
+  cell_connection_map = tibble::tibble(),
+  connection_line_type = c("L-shaped", "Curved"),
+  connection_line_alpha = 0.7,
+  allow_rc_df = FALSE,
+  omit_NSE = FALSE,
+  display_warning_as_plot = FALSE,
+  scale_fill_values = NULL
 )
 }
 \arguments{
@@ -27,6 +35,8 @@
 
 \item{fill}{Character. Name of the column in \code{x} to use for tile fill
 colors. If missing, uses "type" if present, otherwise "data_type".}
+
+\item{fill_alpha}{Numeric. Alpha transparency for the fill color of tiles.}
 
 \item{ignore_validation}{Logical. If \code{TRUE}, skips validation of the
 object before plotting. Default is \code{FALSE}.}
@@ -54,9 +64,39 @@ coordinates, and optionally a grouping variable.}
 \item{add_cell_address}{Logical. If \code{TRUE}, adds cell addresses as text
 labels on the grid. Default is \code{FALSE}.}
 
+\item{no_legend}{Logical. If \code{TRUE}, disables the legend in the plot.
+Default is \code{TRUE}.}
+
+\item{cell_connection_map}{Data frame containing information about cell
+connections (required columns: \code{col_from}, \code{row_from}, \code{col_to}, \code{row_to};
+optional column: \code{color}). Used to draw arrows between cells. This is
+mainly for inspecting how cells are connected post composition or collate
+stage.}
+
+\item{connection_line_type}{Character. Type of connection lines to draw.
+Options are "L-shaped" or "Curved". Default is "L-shaped".}
+
+\item{connection_line_alpha}{Numeric. Alpha transparency for the connection
+lines between cells. Default is \code{0.7}.}
+
 \item{allow_rc_df}{Logical. If \code{TRUE}, allows the input to be any rc_df.
 This is designed for mainly testing and development purposes. Default is
 \code{FALSE}.}
+
+\item{omit_NSE}{Logical. If \code{TRUE}, treats the \code{fill} argument as a
+character string rather than a symbol. This is mainly for internal use to
+omit non-standard evaluation (NSE) in the fill argument. Default is
+\code{FALSE}.}
+
+\item{display_warning_as_plot}{Logical. If \code{TRUE}, displays a warning
+plot instead of a text warning when the object has more than 200 rows or
+columns. Default is \code{FALSE}. This is mainly for shiny modules or for
+displaying warnings in a more user-friendly way.}
+
+\item{scale_fill_values}{Named character vector. If provided, specifies the
+fill colors for specific types or data types in the plot. This allows to
+customize the color mapping for specific fill types, especially for plot of
+cells-analysis.}
 }
 \value{
 Invisibly returns the \code{ggplot} object for further customization

@@ -7,7 +7,7 @@
 attach_header(
   dat,
   hdr,
-  direction = c("v", "h", "vl", "vr", "vm", "hu", "hd", "hm", "direct")
+  direction = c("v", "h", "vl", "vr", "vm", "hu", "hd", "hm", "direct", "nothing")
 )
 }
 \arguments{

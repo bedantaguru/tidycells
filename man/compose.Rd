@@ -4,7 +4,7 @@
 \alias{compose}
 \title{Compose and Stitch Cells from a Cell-Analysis Object}
 \usage{
-compose(ca, simplify = TRUE, trace_composition = FALSE)
+compose(ca, simplify = TRUE)
 }
 \arguments{
 \item{ca}{A \code{cell_analysis} object containing cell attribute mapping and data
@@ -13,9 +13,6 @@ block information.}
 \item{simplify}{Logical. If \code{TRUE} (default), returns a single data frame of
 stitched cells. If \code{FALSE}, returns a list of data frames (composition of
 cells) for further processing (like collate columns).}
-
-\item{trace_composition}{Logical. If \code{TRUE}, adds trace columns to the output
-indicating header-cell associations (for debugging or advanced tracing).}
 }
 \value{
 If \code{simplify = TRUE}, a data frame of stitched cells; otherwise, a

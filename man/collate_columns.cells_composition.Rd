@@ -9,7 +9,8 @@
   ...,
   fixed_columns = c("row", "col", "data_gid", "value", "sheet_name"),
   similarity_threshold = 0,
-  dicard_cell_address = TRUE
+  dicard_cell_address = TRUE,
+  detect_data_block_info_cols = TRUE
 )
 }
 \arguments{
@@ -27,10 +28,21 @@ means it will try to reduce columns as much as possible)}
 \item{dicard_cell_address}{A logical value indicating whether to discard cell
 address columns (like \code{row}, \code{col}, \code{data_gid}) from the output. Default is
 \code{TRUE}.}
+
+\item{detect_data_block_info_cols}{A logical value indicating whether to
+detect data block info columns. These are columns at data_gid-level with at
+max one distinct non-NA value and are not collated. Instead of naming them
+as uncollated_1,2,3 etc., it will be named as info_1,2,3 etc. Default is
+\code{TRUE}.}
 }
 \value{
 A data frame with collated columns, where similar columns are merged
-based on their similarity scores.
+based on their similarity scores. The output data frame will contain the
+\code{fixed_columns} without  \verb{"data_gid", "row", "col"} columns if
+\code{dicard_cell_address} is \code{TRUE}. If \code{detect_data_block_info_cols} is
+\code{TRUE}, it will also detect data block info columns and rename them
+accordingly to \code{info_xx} pattern. Apart from these \code{collated_xx} and
+\code{uncollated_xx} columns will be present in the output.
 }
 \description{
 This function collates columns of a cells composition object, which is a list
